@@ -2,19 +2,22 @@ use crate::schema::sql_types::UserType;
 use crate::schema::users;
 use diesel::{pg::Pg, prelude::*};
 use diesel_derive_enum::DbEnum;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(DbEnum, Debug, Clone, Copy)]
+#[derive(DbEnum, Debug, Serialize, Deserialize,  Clone, Copy)]
 #[ExistingTypePath = "UserType"]
 pub enum UserTypeEnum {
+    #[db_rename = "CREATOR"]
     CREATOR,
+    #[db_rename = "WORKER"]
     WORKER,
 }
 
-#[derive(Queryable, Selectable)]
+#[derive(Queryable, Selectable , Serialize , Debug)]
 #[diesel(table_name = users)]
 #[diesel(check_for_backend(Pg))]
-pub struct User {
+pub struct UserStruct {
     pub id: Uuid,
     pub user_wallet_address: String,
     pub userr_type: UserTypeEnum,
