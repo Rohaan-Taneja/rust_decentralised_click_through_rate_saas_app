@@ -14,7 +14,7 @@ pub enum UserTypeEnum {
     WORKER,
 }
 
-#[derive(Queryable, Selectable , Serialize , Debug)]
+#[derive(Queryable, Selectable ,Deserialize, Serialize , Debug)]
 #[diesel(table_name = users)]
 #[diesel(check_for_backend(Pg))]
 pub struct UserStruct {

@@ -21,11 +21,14 @@ use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberI
 
 use crate::{db::create_db_pool, errors::PersErrors, routes::route_handler::create_route };
 
+mod structs;
 
 mod errors;
 mod routes;
 mod services;
-
+mod middlewares;
+mod utils;
+mod dtos;
 
 pub type DbPool =Pool<AsyncPgConnection>;
 
