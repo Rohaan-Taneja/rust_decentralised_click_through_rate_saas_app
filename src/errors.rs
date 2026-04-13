@@ -1,4 +1,5 @@
 use axum::{http::StatusCode, response::IntoResponse};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
 pub struct PersErrors {
@@ -13,8 +14,9 @@ impl PersErrors {
     }
 }
 
+
 impl IntoResponse for PersErrors {
     fn into_response(self) -> axum::response::Response {
-        self.into_response()
+        (self.status, self.message).into_response()
     }
 }

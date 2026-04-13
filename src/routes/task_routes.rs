@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
 use axum::{
-    Extension, Json, Router, middleware,
-    response::IntoResponse,
-    routing::{get, post},
+    Extension, Json, Router, extract::Path, middleware, response::IntoResponse, routing::{get, post}
 };
 use uuid::Uuid;
 
@@ -14,14 +12,14 @@ use crate::{
     middlewares::{
         auth_middleware::authenticate_user, user_type_middleware::creator_validator_middleware,
     },
-    models::task::Task,
-    services::tasks::{create_new_task, get_creator_all_task},
+    models::{task::Task, task_options::TaskOption},
+    services::tasks::{create_new_task, get_creator_all_task, get_creator_task_details},
     structs::EncodedUserData,
 };
 
 pub fn task_handler() -> Router {
     Router::new()
-        .route("/get--task/{task_id}", post(get_task))
+        
         .merge(creators_routes())
 }
 
@@ -29,6 +27,7 @@ pub fn task_handler() -> Router {
 pub fn creators_routes() -> Router {
     Router::new()
         .route("/create-new-task", post(create_task))
+        .route("/get-task/{task_id}", get(get_task_details))
         .route("/get-all-my-tasks", get(get_all_my_task)) // then the req comes to handlers
         .layer(middleware::from_fn(creator_validator_middleware)) // secondly time it goes here
         .layer(middleware::from_fn(authenticate_user)) // first req will go to this
@@ -75,11 +74,17 @@ pub async fn create_task(
  * 2) and we will create task + options
  *
  */
-pub async fn get_task(
-    Extension(user_id): Extension<Uuid>,
+pub async fn get_task_details(
+    Extension(user_details): Extension<EncodedUserData>,
     Extension(app_state): Extension<Arc<AppState>>,
-) -> Result<String, PersErrors> {
-    Ok("hello".to_string())
+    Path(task_id) : Path<Uuid>
+) -> Result<impl IntoResponse, PersErrors> {
+
+    println!("user , task id = {user_details:?} {task_id}");
+
+    let db_pool = app_state.db_pool.clone();
+    let task_images = get_creator_task_details(task_id, &db_pool).await?;
+    Ok(Json(task_images))
 }
 
 /**

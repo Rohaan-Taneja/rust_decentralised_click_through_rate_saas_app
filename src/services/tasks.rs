@@ -1,11 +1,13 @@
-use axum::http::StatusCode;
+use std::sync::Arc;
+
+use axum::{Extension, http::StatusCode};
 
 use diesel::{ExpressionMethods, QueryDsl, SelectableHelper};
 use diesel_async::{AsyncConnection, RunQueryDsl, scoped_futures::ScopedFutureExt};
 use uuid::Uuid;
 
 use crate::{
-    DbPool,
+    AppState, DbPool,
     db::get_connection_from_pool,
     dtos::new_task_dto::NewTaskDTO,
     errors::PersErrors,
@@ -21,7 +23,6 @@ use crate::{
  * @what_we_are_doing =>
  * 1) 1 transaction (create new task + store all image options)
  * 2)
- *
  */
 pub async fn create_new_task(
     db_pool: &DbPool,
@@ -84,7 +85,6 @@ pub async fn create_new_task(
 /**
 * @inputs => dbpool and user_Wallet_Address
 * @result => we will return this creators all taks
-
 */
 pub async fn get_creator_all_task(
     db_pool: &DbPool,
@@ -96,7 +96,25 @@ pub async fn get_creator_all_task(
         .filter(tasks::user_wallet_address.eq(user_wallet_address))
         .select(Task::as_select())
         .load::<Task>(&mut db_con)
-        .await.map_err(|e| PersErrors::new(e.to_string() , StatusCode::INTERNAL_SERVER_ERROR))?;
+        .await
+        .map_err(|e| PersErrors::new(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
 
     Ok(creator_all_tasks)
+}
+
+/**
+ * @inputs => task id (of which we want details)
+ * @result => we will return task options details
+ */
+pub async fn get_creator_task_details(task_id: Uuid, db_pool: &DbPool) -> Result< Vec<TaskOption>, PersErrors> {
+    let mut db_con = get_connection_from_pool(db_pool).await?;
+
+    let task_options = task_options::table
+        .filter(task_options::task_id.eq(task_id))
+        .select(TaskOption::as_select())
+        .load(&mut db_con)
+        .await
+        .map_err(|e| PersErrors::new(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
+
+    Ok(task_options)
 }

@@ -16,16 +16,17 @@ use crate::{
 
 pub async fn get_or_create_user(
     user_wallet_address: &str,
+    user_type : UserTypeEnum,
     db_pool: DbPool,
 ) -> Result<UserStruct, PersErrors> {
-    let mut db_con = get_connection_from_pool(&db_pool).await?;
 
-    let (is_existing_user, mut user) = check_user(&db_pool, user_wallet_address).await?;
+
+    let (is_existing_user, mut user) = check_user(&db_pool, user_wallet_address , user_type).await?;
 
     if !is_existing_user {
         // create user
         user = Some(
-            create_new_user(db_pool.clone(), user_wallet_address, UserTypeEnum::CREATOR).await?,
+            create_new_user(db_pool.clone(), user_wallet_address, user_type).await?,
         );
     }
 
@@ -47,12 +48,14 @@ pub async fn get_or_create_user(
 pub async fn check_user(
     db_pool: &DbPool,
     user_wallet_address: &str,
+    user_type : UserTypeEnum
 ) -> Result<(bool, Option<UserStruct>), PersErrors> {
     let mut db_con = get_connection_from_pool(db_pool).await?;
 
-    // .await here — truly non-blocking!
+
     let result = users::table
         .filter(users::user_wallet_address.eq(user_wallet_address))
+        .filter(users::userr_type.eq(user_type))
         .first::<UserStruct>(&mut db_con)
         .await;
 
@@ -60,8 +63,10 @@ pub async fn check_user(
         Ok(user_data) => Ok((true, Some(user_data))),
         Err(e) => {
             if e == NotFound {
+                println!("\n \n we did not found any user \n \n \n {e}");
                 Ok((false, None))
             } else {
+                println!("\n \n we are getting error while finding the user \n \n \n {e}");
                 return Err(PersErrors::new(
                     format!("error fetching user {}: {}", user_wallet_address, e),
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -79,8 +84,7 @@ pub async fn create_new_user(
     user_wallet_address: &str,
     user_type: UserTypeEnum,
 ) -> Result<UserStruct, PersErrors> {
-    let mut db_con = get_connection_from_pool(&db_pool).await?;
-
+    let mut __db_con__ = get_connection_from_pool(&db_pool).await?;
     let new_user = NewUser {
         user_wallet_address: user_wallet_address.to_owned(),
         userr_type: user_type,
@@ -89,17 +93,25 @@ pub async fn create_new_user(
     let user = diesel::insert_into(users::table)
         .values(new_user)
         .returning(UserStruct::as_returning())
-        .get_result(&mut db_con)
+        .get_result::<UserStruct>(&mut __db_con__)
         .await
-        .map_err(|e| {
-            PersErrors::new(
+        .map_err(|e| match e {
+            diesel::result::Error::DatabaseError(
+                diesel::result::DatabaseErrorKind::UniqueViolation,
+                _,
+            ) => PersErrors::new(
+                format!("wallet address {} already exists", user_wallet_address),
+                StatusCode::CONFLICT,
+            ),
+            _ => PersErrors::new(
                 format!("new user insertion failed => {}", e),
                 StatusCode::INTERNAL_SERVER_ERROR,
-            )
+            ),
         })?;
 
-    return Ok(user);
+    Ok(user)
 }
+
 
 
 

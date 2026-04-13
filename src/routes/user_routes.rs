@@ -20,7 +20,7 @@ pub fn protected_route() -> Router {
 /**
  * it will authenticate the user and give jwt tokens to user after signing the message
  */
-pub async fn sign_in(Extension(app_state): Extension<Arc<AppState>>) -> Result<String, PersErrors> {
+pub async fn sign_in(Extension(app_state): Extension<Arc<AppState>> , ) -> Result<String, PersErrors> {
 
     // 1) we will get wallet address + signed hash for validation this is the user who has connected his wallet
     // 2) we will search do we have any existing wallet in our db
@@ -29,15 +29,17 @@ pub async fn sign_in(Extension(app_state): Extension<Arc<AppState>>) -> Result<S
     let db_pool = app_state.db_pool.clone();
 
     // todo =>  nounce , wallet_address , user_type
-    let user_wallet_address = "6tyVk25iuv7fXUKCTbUmuv2XTDLP1ifQbXTBeFdVuiUV";
+    let user_wallet_address = "6tyVk25iuv7fXUKCTbUmuv2XTDLP1ifQbXTBeFdVuiUVwq";
+
+    let user_type = UserTypeEnum::WORKER;
 
     println!("we are here before storing data");
 
     // function to check if user is existing user or we have to initialized this user 
-    let user = get_or_create_user(user_wallet_address, db_pool).await?;
+    let user = get_or_create_user(user_wallet_address, user_type ,  db_pool).await?;
 
     // creating jwt token for user
-    let token = encode_user_info(user.id, user_wallet_address.to_owned() , UserTypeEnum::CREATOR)?;
+    let token = encode_user_info(user.id, user_wallet_address.to_owned() , user_type)?;
 
     println!("{}", token);
 
