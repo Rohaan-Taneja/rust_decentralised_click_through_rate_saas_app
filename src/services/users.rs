@@ -4,30 +4,29 @@ use aws_config::BehaviorVersion;
 use aws_sdk_s3::presigning::PresigningConfig;
 use axum::http::StatusCode;
 use diesel::{ExpressionMethods, QueryDsl, SelectableHelper, result::Error::NotFound};
-use diesel_async::RunQueryDsl;
+use diesel_async::{AsyncConnection, RunQueryDsl, scoped_futures::ScopedFutureExt};
 
 use crate::{
     DbPool,
     db::get_connection_from_pool,
     errors::PersErrors,
-    models::user::{NewUser, UserStruct, UserTypeEnum},
-    schema::users,
+    models::{
+        user::{NewUser, UserStruct, UserTypeEnum},
+        worker_work_details::{NewOrUpdateWorkerWorkDetails, PaymentStatus, WorkerWorkDetails},
+    },
+    schema::{users, worker_work_details},
 };
 
 pub async fn get_or_create_user(
     user_wallet_address: &str,
-    user_type : UserTypeEnum,
+    user_type: UserTypeEnum,
     db_pool: DbPool,
 ) -> Result<UserStruct, PersErrors> {
-
-
-    let (is_existing_user, mut user) = check_user(&db_pool, user_wallet_address , user_type).await?;
+    let (is_existing_user, mut user) = check_user(&db_pool, user_wallet_address, user_type).await?;
 
     if !is_existing_user {
         // create user
-        user = Some(
-            create_new_user(db_pool.clone(), user_wallet_address, user_type).await?,
-        );
+        user = Some(create_new_user(db_pool.clone(), user_wallet_address, user_type).await?);
     }
 
     match user {
@@ -48,10 +47,9 @@ pub async fn get_or_create_user(
 pub async fn check_user(
     db_pool: &DbPool,
     user_wallet_address: &str,
-    user_type : UserTypeEnum
+    user_type: UserTypeEnum,
 ) -> Result<(bool, Option<UserStruct>), PersErrors> {
     let mut db_con = get_connection_from_pool(db_pool).await?;
-
 
     let result = users::table
         .filter(users::user_wallet_address.eq(user_wallet_address))
@@ -78,6 +76,7 @@ pub async fn check_user(
 
 /**
  * service to create a new user
+ * and if user is of type WORKER , we will create/initialize its worker_work_details also 
  */
 pub async fn create_new_user(
     db_pool: DbPool,
@@ -85,22 +84,59 @@ pub async fn create_new_user(
     user_type: UserTypeEnum,
 ) -> Result<UserStruct, PersErrors> {
     let mut __db_con__ = get_connection_from_pool(&db_pool).await?;
-    let new_user = NewUser {
-        user_wallet_address: user_wallet_address.to_owned(),
-        userr_type: user_type,
-    };
 
-    let user = diesel::insert_into(users::table)
-        .values(new_user)
-        .returning(UserStruct::as_returning())
-        .get_result::<UserStruct>(&mut __db_con__)
+    // we will creat a txn , if user type == worker , then we will create worker details row
+
+    let user = __db_con__
+        .transaction::<_, diesel::result::Error, _>(|__db_con__| {
+            async move {
+                let new_user = NewUser {
+                    user_wallet_address: user_wallet_address.to_owned(),
+                    userr_type: user_type,
+                };
+
+                let user = diesel::insert_into(users::table)
+                    .values(new_user)
+                    .returning(UserStruct::as_returning())
+                    .get_result::<UserStruct>(__db_con__)
+                    .await?;
+
+                // if new user is a worker , we will create its worker work details also
+                match user.userr_type {
+                    UserTypeEnum::CREATOR => {}
+                    UserTypeEnum::WORKER => {
+                        // create a worker worok details of the user
+
+                        let new_worker_work_details = NewOrUpdateWorkerWorkDetails {
+                            worker_wallet_address: user_wallet_address.to_owned(),
+                            total_lifetime_tasks: 0,
+                            current_no_of_tasks_for_payout: 0,
+                            payout_status: PaymentStatus::NOT_ELIGIBLE,
+                            txn_hash_of_withdrawal: None,
+                        };
+
+                        let worker = diesel::insert_into(worker_work_details::table)
+                            .values(&new_worker_work_details)
+                            .returning(WorkerWorkDetails::as_returning())
+                            .get_result(__db_con__)
+                            .await?;
+                    }
+                }
+
+                Ok(user)
+            }
+            .scope_boxed()
+        })
         .await
         .map_err(|e| match e {
             diesel::result::Error::DatabaseError(
                 diesel::result::DatabaseErrorKind::UniqueViolation,
                 _,
             ) => PersErrors::new(
-                format!("wallet address {} already exists", user_wallet_address),
+                format!(
+                    "wallet address {} already exists as a {:?}",
+                    user_wallet_address, user_type
+                ),
                 StatusCode::CONFLICT,
             ),
             _ => PersErrors::new(
@@ -112,11 +148,8 @@ pub async fn create_new_user(
     Ok(user)
 }
 
-
-
-
 /**
- * service to genrate a presigned url in s3 bucket 
+ * service to genrate a presigned url in s3 bucket
  * we will get size of the file and we will see if it less than 2 mb , then we will creat a url to store that data in the s3
  * we will return this url to frontend and then frontend will directly upload the image to this url and of this size (put req , when size is defined)
  * url has expiry , size , content_type restriction

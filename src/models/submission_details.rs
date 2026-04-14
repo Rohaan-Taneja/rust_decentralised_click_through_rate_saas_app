@@ -7,7 +7,7 @@ use uuid::Uuid;
 #[derive(Queryable, Selectable)]
 #[diesel(table_name = submission_details)]
 #[diesel(check_for_backend(Pg))]
-pub struct Task {
+pub struct SubmissionDetails {
     pub id: Uuid,
     pub worker_wallet_address: String,
     pub task_id: Uuid,

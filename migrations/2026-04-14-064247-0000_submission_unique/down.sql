@@ -1,0 +1,2 @@
+ALTER TABLE submission_details
+DROP CONSTRAINT worker_wallet_address_task_unique;

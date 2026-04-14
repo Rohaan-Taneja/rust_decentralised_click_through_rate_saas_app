@@ -29,9 +29,9 @@ pub async fn sign_in(Extension(app_state): Extension<Arc<AppState>> , ) -> Resul
     let db_pool = app_state.db_pool.clone();
 
     // todo =>  nounce , wallet_address , user_type
-    let user_wallet_address = "6tyVk25iuv7fXUKCTbUmuv2XTDLP1ifQbXTBeFdVuiUVwq";
+    let user_wallet_address = "6tyVk25iuv7fXUKCTbUmuv2XTDLP1ifQbXTBeFdVuiUVwqa";
 
-    let user_type = UserTypeEnum::WORKER;
+    let user_type = UserTypeEnum::CREATOR;
 
     println!("we are here before storing data");
 

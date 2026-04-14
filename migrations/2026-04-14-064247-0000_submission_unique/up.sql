@@ -1,0 +1,2 @@
+ALTER TABLE submission_details
+ADD CONSTRAINT worker_wallet_address_task_unique UNIQUE (worker_wallet_address, task_id);
