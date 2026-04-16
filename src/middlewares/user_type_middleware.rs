@@ -15,8 +15,9 @@ pub async fn creator_validator_middleware(req: Request, next: Next) -> Response 
         Some(user_type_details) => match user_type_details.user_type {
             UserTypeEnum::CREATOR => next.run(req).await,
             UserTypeEnum::WORKER => {
+                println!("user of type worker is not allowed to create task ");
                 return (
-                    StatusCode::UNAUTHORIZED,
+                    StatusCode::FORBIDDEN,
                     "user of type worker , cannot create taks",
                 )
                     .into_response();
@@ -34,7 +35,7 @@ pub async fn worker_validator_middleware(req: Request, next: Next) -> Response {
         Some(user_type_details) => match user_type_details.user_type {
             UserTypeEnum::CREATOR => {
                 return (
-                    StatusCode::UNAUTHORIZED,
+                    StatusCode::FORBIDDEN,
                     "user of type creator , cannot do worker task",
                 )
                     .into_response();

@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::{
     AppState,
-    dtos::new_task_dto::NewTaskDTO,
+    dtos::{new_task_dto::NewTaskDTO, task_dto::TaskDTO, task_id_dto::TaskIdDTO},
     errors::PersErrors,
     middlewares::{
         auth_middleware::authenticate_user, user_type_middleware::creator_validator_middleware,
@@ -46,7 +46,7 @@ pub async fn create_task(
     Extension(user_data): Extension<EncodedUserData>,
     Extension(app_state): Extension<Arc<AppState>>,
     Json(task_details): Json<NewTaskDTO>,
-) -> Result<String, PersErrors> {
+) -> Result<impl IntoResponse, PersErrors> {
     // validate txn hash
 
     // create a task and store images in options (a transction call to store data in multiple tables )
@@ -54,14 +54,16 @@ pub async fn create_task(
     let db_pool = app_state.db_pool.clone();
 
     // create new tasks and options
-    create_new_task(
+    let task_id = create_new_task(
         &db_pool,
         user_data.user_wallet_address.to_owned(),
         task_details,
     )
     .await?;
 
-    Ok("hello".to_string())
+    Ok(Json(TaskIdDTO{
+        task_id : task_id.to_string()
+    }))
 }
 
 /**
@@ -93,7 +95,6 @@ pub async fn get_task_details(
  * @what_we_are_doing =>
  *
  *  just returning all the tasks
- *
  */
 pub async fn get_all_my_task(
     Extension(user_details): Extension<EncodedUserData>,
@@ -105,7 +106,6 @@ pub async fn get_all_my_task(
 
     let all_tasks = get_creator_all_task(&db_pool, user_wallet_address).await?;
 
-    Ok(Json(all_tasks))
+    let vec_of_task_dto = TaskDTO::to_tasks(all_tasks);
+    Ok(Json(vec_of_task_dto))
 }
-
-// vec of struct to array of json

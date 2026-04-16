@@ -28,7 +28,7 @@ pub async fn create_new_task(
     db_pool: &DbPool,
     user_wallet_address: String,
     new_task_details: NewTaskDTO,
-) -> Result<(), PersErrors> {
+) -> Result<Uuid, PersErrors> {
     let mut conn = get_connection_from_pool(db_pool).await?;
 
     let user_wallet_address = user_wallet_address.clone();
@@ -36,7 +36,7 @@ pub async fn create_new_task(
 
     println!("we are just before the transaction");
 
-    conn.transaction::<_, diesel::result::Error, _>(|conn| {
+    let task_id = conn.transaction::<_, diesel::result::Error, _>(|conn| {
         async move {
             // creating new task
             let new_task = NewTask {
@@ -72,14 +72,14 @@ pub async fn create_new_task(
 
             println!("these are all the options {:?}", res);
 
-            Ok(())
+            Ok(task.id)
         }
         .scope_boxed()
     })
     .await
     .map_err(|e| PersErrors::new(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
 
-    Ok(())
+    Ok(task_id)
 }
 
 /**

@@ -5,6 +5,7 @@ use aws_sdk_s3::presigning::PresigningConfig;
 use axum::http::StatusCode;
 use diesel::{ExpressionMethods, QueryDsl, SelectableHelper, result::Error::NotFound};
 use diesel_async::{AsyncConnection, RunQueryDsl, scoped_futures::ScopedFutureExt};
+use uuid::Uuid;
 
 use crate::{
     DbPool,
@@ -154,7 +155,7 @@ pub async fn create_new_user(
  * we will return this url to frontend and then frontend will directly upload the image to this url and of this size (put req , when size is defined)
  * url has expiry , size , content_type restriction
  */
-pub async fn generate_presigned_url(file_size: i64) -> Result<String, PersErrors> {
+pub async fn generate_presigned_url(file_size: i64 , user_id : String) -> Result<(String , String), PersErrors> {
     // max image size in bytes
     let max_file_size = 1024 * 1024 * 2;
 
@@ -189,11 +190,14 @@ pub async fn generate_presigned_url(file_size: i64) -> Result<String, PersErrors
     })?;
 
     println!("setup created");
+
+    let img_id = Uuid::new_v4().to_string();
+
     // with size , use post , else put
     let presigned_url = s3
         .put_object()
         .bucket(bucket)
-        .key(format!("{}/user_image_uploaded", key))
+        .key(format!("{}/{}/{}", key , user_id , img_id))
         // .content_length(file_size)    // uncomment it , when we will sending size from the frontend , a little diff also rejects the upload
         .presigned(
             PresigningConfig::builder()
@@ -209,5 +213,5 @@ pub async fn generate_presigned_url(file_size: i64) -> Result<String, PersErrors
             )
         })?;
 
-    Ok(presigned_url.uri().to_string())
+    Ok(( img_id , presigned_url.uri().to_string()))
 }

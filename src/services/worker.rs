@@ -34,7 +34,7 @@ use crate::{
 pub async fn new_task_for_worker(
     db_pool: &DbPool,
     user_wallet_address: String,
-) -> Result<(Task, Vec<TaskOption>), PersErrors> {
+) -> Result<(String, Vec<TaskOption>), PersErrors> {
     let mut db_con = get_connection_from_pool(db_pool).await?;
 
     // we will find a task from task table
@@ -71,7 +71,7 @@ pub async fn new_task_for_worker(
 
     let task_options = get_creator_task_details(task.id.to_owned(), &db_pool).await?;
 
-    Ok((task, task_options))
+    Ok((task.id.to_string(), task_options))
 }
 
 /**

@@ -40,6 +40,7 @@ pub async fn authenticate_user(mut req: Request, next: Next) -> Response {
         &userr_data
     );
 
+    println!("user data added {userr_data:?}");
     req.extensions_mut().insert(userr_data);
 
     next.run(req).await

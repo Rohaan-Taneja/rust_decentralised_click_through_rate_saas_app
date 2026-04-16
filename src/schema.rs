@@ -1,17 +1,36 @@
 // @generated automatically by Diesel CLI.
 
 pub mod sql_types {
-    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "pay_status"))]
     pub struct PayStatus;
 
-    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "payout_status"))]
+    pub struct PayoutStatus;
+
+    #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "task_status"))]
     pub struct TaskStatus;
 
-    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "user_type"))]
     pub struct UserType;
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::PayoutStatus;
+
+    payouts (id) {
+        id -> Uuid,
+        worker_wallet_address -> Varchar,
+        amount -> Varchar,
+        created_at -> Timestamptz,
+        completed_at -> Nullable<Timestamptz>,
+        txn_hash -> Varchar,
+        payout_status -> PayoutStatus,
+    }
 }
 
 diesel::table! {
@@ -76,6 +95,7 @@ diesel::joinable!(submission_details -> tasks (task_id));
 diesel::joinable!(task_options -> tasks (task_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
+    payouts,
     submission_details,
     task_options,
     tasks,
