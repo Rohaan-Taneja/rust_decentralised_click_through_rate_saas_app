@@ -7,6 +7,7 @@ use axum::{
         header::{AUTHORIZATION, CONTENT_TYPE},
     },
 };
+use bb8_redis::RedisConnectionManager;
 use chrono::ParseError;
 
 use diesel_async::{AsyncPgConnection, pooled_connection::{AsyncDieselConnectionManager, bb8::{Pool, PooledConnection}}};
@@ -17,9 +18,10 @@ use tower_http::{
 mod models;
 mod schema;
 mod db;
+mod redis;
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::{db::create_db_pool, errors::PersErrors, routes::route_handler::create_route };
+use crate::{db::create_db_pool, errors::PersErrors, redis::{RedisPool, create_redis_pool}, routes::route_handler::create_route };
 
 mod structs;
 
@@ -34,9 +36,13 @@ pub type DbPool =Pool<AsyncPgConnection>;
 
 pub type DbCon<'a> = PooledConnection<'a, AsyncPgConnection>;
 
+pub type RedisCon<'a> = bb8::PooledConnection<'a , RedisConnectionManager>;
+
+
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub db_pool: DbPool,
+    pub redis_pool : RedisPool
 }
 
 
@@ -47,10 +53,12 @@ async fn main() -> Result<(), PersErrors> {
     dotenvy::dotenv()
         .map_err(|e| PersErrors::new(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
 
-    let db_url = env::var("DATABASE_URL")
-        .map_err(|e| PersErrors::new(e.to_string(), StatusCode::INTERNAL_SERVER_ERROR))?;
+  
     // pool of db connections
-    let db_pool = create_db_pool(db_url).await?;
+    let db_pool = create_db_pool().await?;
+
+    // pool of redis connection for cashing data
+    let redis_pool = create_redis_pool().await?;
 
     // tracng in layerd format
     tracing_subscriber::registry()
@@ -71,9 +79,10 @@ async fn main() -> Result<(), PersErrors> {
         )
         .allow_headers([AUTHORIZATION, CONTENT_TYPE]);
 
-    // 
+    //  shared state in all the routes handlers
     let app_state = Arc::new(AppState {
         db_pool,
+        redis_pool
     });
 
     // app created

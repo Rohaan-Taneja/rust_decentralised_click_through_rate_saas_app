@@ -1,7 +1,12 @@
-use std::sync::Arc;
+use std::{env, sync::Arc};
 
 use axum::{
-    Extension, Json, Router, extract::Path, middleware, response::IntoResponse, routing::{get, post}
+    Extension, Json, Router,
+    extract::Path,
+    http::StatusCode,
+    middleware,
+    response::IntoResponse,
+    routing::{get, post},
 };
 use uuid::Uuid;
 
@@ -12,15 +17,14 @@ use crate::{
     middlewares::{
         auth_middleware::authenticate_user, user_type_middleware::creator_validator_middleware,
     },
-    models::{task::Task, task_options::TaskOption},
-    services::tasks::{create_new_task, get_creator_all_task, get_creator_task_details},
+    services::tasks::{
+     create_creators_payment_intent, create_new_task, get_creator_all_task, get_creator_task_details
+    },
     structs::EncodedUserData,
 };
 
 pub fn task_handler() -> Router {
-    Router::new()
-        
-        .merge(creators_routes())
+    Router::new().merge(creators_routes())
 }
 
 // routes which requires existing user + user=creator
@@ -31,6 +35,22 @@ pub fn creators_routes() -> Router {
         .route("/get-all-my-tasks", get(get_all_my_task)) // then the req comes to handlers
         .layer(middleware::from_fn(creator_validator_middleware)) // secondly time it goes here
         .layer(middleware::from_fn(authenticate_user)) // first req will go to this
+}
+
+
+/**
+ * this will create payment intent , and return the payment id to the user when creator want to create a new task
+ * just creation of an id , so as to track the payment and helps in payment validation
+ */
+pub async fn create_payment_intent(
+    Extension(app_state): Extension<Arc<AppState>>,
+    Extension(user_data): Extension<EncodedUserData>,
+) -> Result<impl IntoResponse, PersErrors> {
+    let db_pool = app_state.db_pool.clone();
+
+    let creator_payment_intent =
+        create_creators_payment_intent(db_pool, user_data.user_wallet_address).await?;
+    Ok(Json(creator_payment_intent.id))
 }
 
 /**
@@ -48,10 +68,27 @@ pub async fn create_task(
     Json(task_details): Json<NewTaskDTO>,
 ) -> Result<impl IntoResponse, PersErrors> {
     // validate txn hash
+    println!("this is teh txn hash {}", task_details.txn_sign);
 
+    let central_wallet_address = env::var("CENTRAL_WALLET_ADDRESS").map_err(|e| {
+        PersErrors::new(
+            format!("central wallet address is not present => {}", e.to_string()),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        )
+    })?;
+
+    /**
+     * 1) txn hash .. get details
+     *
+     * sender should be this user wallet
+     * and reciver should be = our central wallet address
+     * and money transfer should be 0.1 sol
+     */
     // create a task and store images in options (a transction call to store data in multiple tables )
-
     let db_pool = app_state.db_pool.clone();
+
+
+
 
     // create new tasks and options
     let task_id = create_new_task(
@@ -61,8 +98,8 @@ pub async fn create_task(
     )
     .await?;
 
-    Ok(Json(TaskIdDTO{
-        task_id : task_id.to_string()
+    Ok(Json(TaskIdDTO {
+        task_id: task_id.to_string(),
     }))
 }
 
@@ -79,9 +116,8 @@ pub async fn create_task(
 pub async fn get_task_details(
     Extension(user_details): Extension<EncodedUserData>,
     Extension(app_state): Extension<Arc<AppState>>,
-    Path(task_id) : Path<Uuid>
+    Path(task_id): Path<Uuid>,
 ) -> Result<impl IntoResponse, PersErrors> {
-
     println!("user , task id = {user_details:?} {task_id}");
 
     let db_pool = app_state.db_pool.clone();
